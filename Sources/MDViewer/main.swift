@@ -10,6 +10,47 @@ enum WindowMetrics {
     static let defaultContentSize = CGSize(width: 1160, height: 700)
 }
 
+enum SplitMetrics {
+    static let dividerWidth: CGFloat = 12
+    static let minimumPaneWidth: CGFloat = 220
+}
+
+func clampedSplitFraction(for totalWidth: CGFloat, proposed: CGFloat) -> CGFloat {
+    guard totalWidth > 0 else {
+        return 0.5
+    }
+
+    let minimumFraction = SplitMetrics.minimumPaneWidth / totalWidth
+    let maximumFraction = 1 - minimumFraction
+    let lowerBound = min(minimumFraction, 0.5)
+    let upperBound = max(maximumFraction, 0.5)
+    return min(max(proposed, lowerBound), upperBound)
+}
+
+enum ThemeDefaults {
+    static let lightBackgroundHex = "#FFFFFF"
+    static let lightToolbarHex = "#F3F4F6"
+    static let lightCardHex = "#FFFFFF"
+    static let lightDividerHex = "#C7CDD6"
+
+    static let darkBackgroundHex = "#292D3E"
+    static let darkToolbarHex = "#384058"
+    static let darkCardHex = "#47506B"
+    static let darkDividerHex = "#D7DCE5"
+}
+
+enum ThemePreferenceKey {
+    static let lightBackgroundHex = "theme.light.backgroundHex"
+    static let lightToolbarHex = "theme.light.toolbarHex"
+    static let lightCardHex = "theme.light.cardHex"
+    static let lightDividerHex = "theme.light.dividerHex"
+
+    static let darkBackgroundHex = "theme.dark.backgroundHex"
+    static let darkToolbarHex = "theme.dark.toolbarHex"
+    static let darkCardHex = "theme.dark.cardHex"
+    static let darkDividerHex = "theme.dark.dividerHex"
+}
+
 enum ViewMode: String, CaseIterable, Identifiable {
     case split
     case editor
@@ -32,147 +73,167 @@ enum ViewMode: String, CaseIterable, Identifiable {
 enum ThemeMode: String, CaseIterable, Identifiable {
     case light
     case dark
-    case smooth
 
     var id: Self { self }
 
     var title: String {
-        switch self {
-        case .light:
-            return "Light"
-        case .dark:
-            return "Dark"
-        case .smooth:
-            return "Smooth"
-        }
-    }
-
-    var backgroundColor: Color {
-        Color(nsColor: nsBackgroundColor)
-    }
-
-    var secondaryBackgroundColor: Color {
-        switch self {
-        case .light:
-            return Color(nsColor: NSColor(calibratedWhite: 0.96, alpha: 1))
-        case .dark:
-            return Color(nsColor: NSColor(calibratedWhite: 0.07, alpha: 1))
-        case .smooth:
-            return Color(nsColor: NSColor(calibratedRed: 0.20, green: 0.23, blue: 0.31, alpha: 1))
-        }
-    }
-
-    var stripTopColor: Color {
-        switch self {
-        case .light:
-            return Color(nsColor: NSColor(calibratedWhite: 0.985, alpha: 1))
-        case .dark:
-            return Color(nsColor: NSColor(calibratedWhite: 0.12, alpha: 1))
-        case .smooth:
-            return Color(nsColor: NSColor(calibratedRed: 0.24, green: 0.27, blue: 0.37, alpha: 1))
-        }
-    }
-
-    var stripBottomColor: Color {
-        switch self {
-        case .light:
-            return secondaryBackgroundColor
-        case .dark:
-            return Color(nsColor: NSColor(calibratedWhite: 0.08, alpha: 1))
-        case .smooth:
-            return Color(nsColor: NSColor(calibratedRed: 0.18, green: 0.20, blue: 0.29, alpha: 1))
-        }
-    }
-
-    var cardBackgroundColor: Color {
-        switch self {
-        case .light:
-            return Color.white.opacity(0.92)
-        case .dark:
-            return Color(nsColor: NSColor(calibratedWhite: 0.16, alpha: 1))
-        case .smooth:
-            return Color(nsColor: NSColor(calibratedRed: 0.29, green: 0.32, blue: 0.44, alpha: 1))
-        }
-    }
-
-    var cardBorderColor: Color {
-        switch self {
-        case .light:
-            return Color.black.opacity(0.08)
-        case .dark:
-            return Color.white.opacity(0.08)
-        case .smooth:
-            return Color.white.opacity(0.10)
-        }
-    }
-
-    var cardShadowColor: Color {
-        switch self {
-        case .light:
-            return Color.black.opacity(0.06)
-        case .dark:
-            return Color.black.opacity(0.24)
-        case .smooth:
-            return Color.black.opacity(0.20)
-        }
-    }
-
-    var dividerColor: Color {
-        switch self {
-        case .light:
-            return Color.black.opacity(0.12)
-        case .dark:
-            return Color.white.opacity(0.10)
-        case .smooth:
-            return Color.white.opacity(0.14)
-        }
+        self == .light ? "Light" : "Dark"
     }
 
     var primaryTextColor: Color {
-        switch self {
-        case .light:
-            return Color.black.opacity(0.92)
-        case .dark, .smooth:
-            return Color.white.opacity(0.92)
-        }
+        self == .light ? Color.black.opacity(0.92) : Color.white.opacity(0.92)
     }
 
     var secondaryTextColor: Color {
-        switch self {
-        case .light:
-            return Color.black.opacity(0.62)
-        case .dark, .smooth:
-            return Color.white.opacity(0.72)
-        }
+        self == .light ? Color.black.opacity(0.62) : Color.white.opacity(0.72)
     }
 
     var colorScheme: ColorScheme {
-        switch self {
-        case .light:
-            return .light
-        case .dark, .smooth:
-            return .dark
-        }
+        self == .light ? .light : .dark
     }
 
     var windowAppearanceName: NSAppearance.Name {
-        switch self {
-        case .light:
-            return .aqua
-        case .dark, .smooth:
-            return .darkAqua
+        self == .light ? .aqua : .darkAqua
+    }
+
+    var symbolName: String {
+        self == .light ? "sun.max.fill" : "moon.fill"
+    }
+
+    static func fromStored(_ rawValue: String) -> ThemeMode {
+        if rawValue == "smooth" {
+            return .dark
         }
+
+        return ThemeMode(rawValue: rawValue) ?? .light
+    }
+}
+
+struct ThemePaletteConfiguration {
+    let backgroundHex: String
+    let toolbarHex: String
+    let cardHex: String
+    let dividerHex: String
+
+    func palette(for mode: ThemeMode) -> ThemePalette {
+        ThemePalette(
+            mode: mode,
+            background: NSColor(hexString: backgroundHex) ?? ThemePalette.defaultBackground(for: mode),
+            toolbar: NSColor(hexString: toolbarHex) ?? ThemePalette.defaultToolbar(for: mode),
+            card: NSColor(hexString: cardHex) ?? ThemePalette.defaultCard(for: mode),
+            divider: NSColor(hexString: dividerHex) ?? ThemePalette.defaultDivider(for: mode)
+        )
+    }
+}
+
+struct ThemePalette {
+    let mode: ThemeMode
+    let background: NSColor
+    let toolbar: NSColor
+    let card: NSColor
+    let divider: NSColor
+
+    var backgroundColor: Color {
+        Color(nsColor: background)
+    }
+
+    var stripTopColor: Color {
+        Color(nsColor: toolbar.adjustingBrightness(by: mode == .light ? 0.03 : 0.04))
+    }
+
+    var stripBottomColor: Color {
+        Color(nsColor: toolbar.adjustingBrightness(by: mode == .light ? -0.02 : -0.04))
+    }
+
+    var cardBackgroundColor: Color {
+        Color(nsColor: card)
+    }
+
+    var cardBorderColor: Color {
+        Color(nsColor: divider.withAlphaComponent(mode == .light ? 0.45 : 0.32))
+    }
+
+    var cardShadowColor: Color {
+        mode == .light ? Color.black.opacity(0.06) : Color.black.opacity(0.18)
+    }
+
+    var dividerColor: Color {
+        Color(nsColor: divider)
     }
 
     var nsBackgroundColor: NSColor {
-        switch self {
-        case .light:
-            return .white
-        case .dark:
-            return .black
-        case .smooth:
-            return NSColor(calibratedRed: 41 / 255, green: 45 / 255, blue: 62 / 255, alpha: 1)
+        background
+    }
+
+    static func defaultBackground(for mode: ThemeMode) -> NSColor {
+        NSColor(hexString: mode == .light ? ThemeDefaults.lightBackgroundHex : ThemeDefaults.darkBackgroundHex) ?? .white
+    }
+
+    static func defaultToolbar(for mode: ThemeMode) -> NSColor {
+        NSColor(hexString: mode == .light ? ThemeDefaults.lightToolbarHex : ThemeDefaults.darkToolbarHex) ?? .white
+    }
+
+    static func defaultCard(for mode: ThemeMode) -> NSColor {
+        NSColor(hexString: mode == .light ? ThemeDefaults.lightCardHex : ThemeDefaults.darkCardHex) ?? .white
+    }
+
+    static func defaultDivider(for mode: ThemeMode) -> NSColor {
+        NSColor(hexString: mode == .light ? ThemeDefaults.lightDividerHex : ThemeDefaults.darkDividerHex) ?? .lightGray
+    }
+}
+
+extension NSColor {
+    convenience init?(hexString: String) {
+        let sanitized = hexString
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "#", with: "")
+
+        guard sanitized.count == 6 || sanitized.count == 8 else {
+            return nil
         }
+
+        var value: UInt64 = 0
+        guard Scanner(string: sanitized).scanHexInt64(&value) else {
+            return nil
+        }
+
+        let red, green, blue, alpha: CGFloat
+
+        if sanitized.count == 8 {
+            red = CGFloat((value & 0xFF00_0000) >> 24) / 255
+            green = CGFloat((value & 0x00FF_0000) >> 16) / 255
+            blue = CGFloat((value & 0x0000_FF00) >> 8) / 255
+            alpha = CGFloat(value & 0x0000_00FF) / 255
+        } else {
+            red = CGFloat((value & 0xFF0000) >> 16) / 255
+            green = CGFloat((value & 0x00FF00) >> 8) / 255
+            blue = CGFloat(value & 0x0000FF) / 255
+            alpha = 1
+        }
+
+        self.init(srgbRed: red, green: green, blue: blue, alpha: alpha)
+    }
+
+    var hexString: String {
+        guard let color = usingColorSpace(.sRGB) else {
+            return "#000000"
+        }
+
+        let red = Int(round(color.redComponent * 255))
+        let green = Int(round(color.greenComponent * 255))
+        let blue = Int(round(color.blueComponent * 255))
+        return String(format: "#%02X%02X%02X", red, green, blue)
+    }
+
+    func adjustingBrightness(by delta: CGFloat) -> NSColor {
+        guard let color = usingColorSpace(.sRGB) else {
+            return self
+        }
+
+        let red = max(0, min(1, color.redComponent + delta))
+        let green = max(0, min(1, color.greenComponent + delta))
+        let blue = max(0, min(1, color.blueComponent + delta))
+        return NSColor(srgbRed: red, green: green, blue: blue, alpha: color.alphaComponent)
     }
 }
 
@@ -401,15 +462,55 @@ struct ContentView: View {
     @EnvironmentObject private var document: DocumentController
     @AppStorage("viewMode") private var viewModeRawValue = ViewMode.split.rawValue
     @AppStorage("themeMode") private var themeModeRawValue = ThemeMode.light.rawValue
+    @AppStorage(ThemePreferenceKey.lightBackgroundHex) private var lightBackgroundHex = ThemeDefaults.lightBackgroundHex
+    @AppStorage(ThemePreferenceKey.lightToolbarHex) private var lightToolbarHex = ThemeDefaults.lightToolbarHex
+    @AppStorage(ThemePreferenceKey.lightCardHex) private var lightCardHex = ThemeDefaults.lightCardHex
+    @AppStorage(ThemePreferenceKey.lightDividerHex) private var lightDividerHex = ThemeDefaults.lightDividerHex
+    @AppStorage(ThemePreferenceKey.darkBackgroundHex) private var darkBackgroundHex = ThemeDefaults.darkBackgroundHex
+    @AppStorage(ThemePreferenceKey.darkToolbarHex) private var darkToolbarHex = ThemeDefaults.darkToolbarHex
+    @AppStorage(ThemePreferenceKey.darkCardHex) private var darkCardHex = ThemeDefaults.darkCardHex
+    @AppStorage(ThemePreferenceKey.darkDividerHex) private var darkDividerHex = ThemeDefaults.darkDividerHex
     @State private var isDropTargeted = false
     @State private var controlStripWidth: CGFloat = 0
+    @State private var splitFraction: CGFloat = 0.5
 
     private var viewMode: ViewMode {
         ViewMode(rawValue: viewModeRawValue) ?? .split
     }
 
     private var themeMode: ThemeMode {
-        ThemeMode(rawValue: themeModeRawValue) ?? .light
+        if let forcedTheme = ProcessInfo.processInfo.environment["MDVIEWER_FORCE_THEME"] {
+            return ThemeMode(rawValue: forcedTheme) ?? ThemeMode.fromStored(themeModeRawValue)
+        }
+
+        return ThemeMode.fromStored(themeModeRawValue)
+    }
+
+    private var lightThemeConfiguration: ThemePaletteConfiguration {
+        ThemePaletteConfiguration(
+            backgroundHex: lightBackgroundHex,
+            toolbarHex: lightToolbarHex,
+            cardHex: lightCardHex,
+            dividerHex: lightDividerHex
+        )
+    }
+
+    private var darkThemeConfiguration: ThemePaletteConfiguration {
+        ThemePaletteConfiguration(
+            backgroundHex: darkBackgroundHex,
+            toolbarHex: darkToolbarHex,
+            cardHex: darkCardHex,
+            dividerHex: darkDividerHex
+        )
+    }
+
+    private var themePalette: ThemePalette {
+        switch themeMode {
+        case .light:
+            return lightThemeConfiguration.palette(for: .light)
+        case .dark:
+            return darkThemeConfiguration.palette(for: .dark)
+        }
     }
 
     private var viewModeBinding: Binding<ViewMode> {
@@ -419,10 +520,10 @@ struct ContentView: View {
         )
     }
 
-    private var themeModeBinding: Binding<ThemeMode> {
+    private var isDarkModeBinding: Binding<Bool> {
         Binding(
-            get: { themeMode },
-            set: { themeModeRawValue = $0.rawValue }
+            get: { themeMode == .dark },
+            set: { themeModeRawValue = $0 ? ThemeMode.dark.rawValue : ThemeMode.light.rawValue }
         )
     }
 
@@ -430,16 +531,13 @@ struct ContentView: View {
         VStack(spacing: 0) {
             controlStrip
             Rectangle()
-                .fill(themeMode.dividerColor)
+                .fill(themePalette.dividerColor)
                 .frame(height: 1)
 
             Group {
                 switch viewMode {
                 case .split:
-                    HSplitView {
-                        editorPane
-                        previewPane
-                    }
+                    splitPane
                 case .editor:
                     editorPane
                 case .preview:
@@ -447,8 +545,8 @@ struct ContentView: View {
                 }
             }
         }
-        .background(themeMode.backgroundColor)
-        .background(WindowConfigurationView(themeMode: themeMode, document: document))
+        .background(themePalette.backgroundColor)
+        .background(WindowConfigurationView(themeMode: themeMode, themePalette: themePalette, document: document))
         .frame(
             minWidth: WindowMetrics.minimumContentSize.width,
             minHeight: WindowMetrics.minimumContentSize.height
@@ -462,6 +560,16 @@ struct ContentView: View {
                     .padding(12)
             }
         }
+    }
+
+    private var splitPane: some View {
+        NativeSplitPane(
+            splitFraction: $splitFraction,
+            dividerNSColor: themePalette.divider,
+            isLightMode: themeMode == .light,
+            leading: editorPane,
+            trailing: previewPane
+        )
     }
 
     private var controlStripLayoutMode: ControlStripLayoutMode {
@@ -493,7 +601,7 @@ struct ContentView: View {
         .padding(.vertical, 8)
         .background(
             LinearGradient(
-                colors: [themeMode.stripTopColor, themeMode.stripBottomColor],
+                colors: [themePalette.stripTopColor, themePalette.stripBottomColor],
                 startPoint: .top,
                 endPoint: .bottom
             )
@@ -594,9 +702,9 @@ struct ContentView: View {
     private var themeToolbarCard: some View {
         toolbarCard {
             HStack(spacing: 10) {
-                toolbarSectionLabel(title: "Theme", symbol: "circle.lefthalf.filled")
+                toolbarSectionLabel(title: "Theme", symbol: themeMode.symbolName)
                 stripDivider
-                themeStrip
+                modeToggleStrip
             }
         }
     }
@@ -604,11 +712,11 @@ struct ContentView: View {
     private var compactThemeToolbarCard: some View {
         toolbarCard(horizontalPadding: 8, verticalPadding: 7, shadowRadius: 5) {
             HStack(spacing: 7) {
-                Image(systemName: "circle.lefthalf.filled")
+                Image(systemName: themeMode.symbolName)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(themeMode.secondaryTextColor)
 
-                themeStrip
+                modeToggleStrip
             }
         }
     }
@@ -668,14 +776,17 @@ struct ContentView: View {
         .fixedSize(horizontal: true, vertical: false)
     }
 
-    private var themeStrip: some View {
-        Picker("Theme", selection: themeModeBinding) {
-            ForEach(ThemeMode.allCases) { mode in
-                Text(mode.title).tag(mode)
+    private var modeToggleStrip: some View {
+        HStack(spacing: 8) {
+            Text(themeMode.title)
+                .font(.system(size: 12, weight: .semibold))
+
+            Toggle(isOn: isDarkModeBinding) {
+                EmptyView()
             }
+            .labelsHidden()
+            .toggleStyle(.switch)
         }
-        .labelsHidden()
-        .pickerStyle(.menu)
         .fixedSize(horizontal: true, vertical: false)
     }
 
@@ -744,8 +855,9 @@ struct ContentView: View {
     }
 
     private var stripDivider: some View {
-        Divider()
-            .frame(height: 16)
+        Rectangle()
+            .fill(themePalette.dividerColor.opacity(themeMode == .light ? 0.75 : 0.55))
+            .frame(width: 1, height: 16)
     }
 
     private var statusIndicatorOnly: some View {
@@ -783,24 +895,24 @@ struct ContentView: View {
             .padding(.vertical, verticalPadding)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(themeMode.cardBackgroundColor)
+                    .fill(themePalette.cardBackgroundColor)
             )
             .overlay {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .stroke(themeMode.cardBorderColor, lineWidth: 1)
+                    .stroke(themePalette.cardBorderColor, lineWidth: 1)
             }
-            .shadow(color: themeMode.cardShadowColor, radius: shadowRadius, y: 1)
+            .shadow(color: themePalette.cardShadowColor, radius: shadowRadius, y: 1)
     }
 
     private var editorPane: some View {
         ZStack {
-            themeMode.backgroundColor
+            themePalette.backgroundColor
 
             TextEditor(text: $document.text)
                 .font(.body)
                 .scrollContentBackground(.hidden)
                 .foregroundStyle(themeMode.primaryTextColor)
-                .background(themeMode.backgroundColor)
+                .background(themePalette.backgroundColor)
         }
         .environment(\.colorScheme, themeMode.colorScheme)
         .frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
@@ -833,8 +945,263 @@ struct ContentView: View {
     }
 }
 
+struct NativeSplitPane<Leading: View, Trailing: View>: NSViewRepresentable {
+    @Binding var splitFraction: CGFloat
+    let dividerNSColor: NSColor
+    let isLightMode: Bool
+    let leading: Leading
+    let trailing: Trailing
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(splitFraction: $splitFraction)
+    }
+
+    func makeNSView(context: Context) -> SplitContainerView {
+        let containerView = SplitContainerView()
+        containerView.splitView.delegate = context.coordinator
+        containerView.splitView.themeDividerColor = dividerNSColor
+        containerView.splitView.isLightMode = isLightMode
+        containerView.splitView.onResetToCenter = { [weak containerView, weak coordinator = context.coordinator] in
+            guard let containerView, let coordinator else {
+                return
+            }
+
+            coordinator.resetSplitToCenter(in: containerView)
+        }
+        containerView.leadingHostingView.rootView = AnyView(leading)
+        containerView.trailingHostingView.rootView = AnyView(trailing)
+
+        DispatchQueue.main.async {
+            context.coordinator.applySplitFractionIfNeeded(in: containerView, fraction: splitFraction, force: true)
+        }
+
+        return containerView
+    }
+
+    func updateNSView(_ nsView: SplitContainerView, context: Context) {
+        nsView.splitView.themeDividerColor = dividerNSColor
+        nsView.splitView.isLightMode = isLightMode
+        nsView.leadingHostingView.rootView = AnyView(leading)
+        nsView.trailingHostingView.rootView = AnyView(trailing)
+
+        DispatchQueue.main.async {
+            context.coordinator.applySplitFractionIfNeeded(in: nsView, fraction: splitFraction)
+        }
+    }
+
+    @MainActor
+    final class Coordinator: NSObject, NSSplitViewDelegate {
+        private var splitFraction: Binding<CGFloat>
+        private var isApplyingProgrammaticUpdate = false
+        private var hasAppliedInitialSplit = false
+
+        init(splitFraction: Binding<CGFloat>) {
+            self.splitFraction = splitFraction
+        }
+
+        func splitView(
+            _ splitView: NSSplitView,
+            constrainSplitPosition proposedPosition: CGFloat,
+            ofSubviewAt dividerIndex: Int
+        ) -> CGFloat {
+            let totalWidth = max(splitView.bounds.width - splitView.dividerThickness, 1)
+            let clampedFraction = clampedSplitFraction(for: totalWidth, proposed: proposedPosition / totalWidth)
+            return totalWidth * clampedFraction
+        }
+
+        func splitViewDidResizeSubviews(_ notification: Notification) {
+            guard
+                let splitView = notification.object as? NSSplitView,
+                let containerView = splitView.superview as? SplitContainerView
+            else {
+                return
+            }
+
+            if !hasAppliedInitialSplit {
+                applySplitFractionIfNeeded(in: containerView, fraction: splitFraction.wrappedValue, force: true)
+                return
+            }
+
+            guard
+                !isApplyingProgrammaticUpdate,
+                let leadingWidth = splitView.subviews.first?.frame.width
+            else {
+                return
+            }
+
+            let totalWidth = max(splitView.bounds.width - splitView.dividerThickness, 1)
+            let nextFraction = clampedSplitFraction(for: totalWidth, proposed: leadingWidth / totalWidth)
+            (splitView as? ThemedSplitView)?.desiredFraction = nextFraction
+
+            if abs(splitFraction.wrappedValue - nextFraction) > 0.001 {
+                splitFraction.wrappedValue = nextFraction
+            }
+        }
+
+        func applySplitFractionIfNeeded(in containerView: SplitContainerView, fraction: CGFloat, force: Bool = false) {
+            let splitView = containerView.splitView
+            splitView.layoutSubtreeIfNeeded()
+
+            let totalWidth = max(splitView.bounds.width - splitView.dividerThickness, 1)
+            guard totalWidth > 1 else {
+                return
+            }
+
+            let clampedFraction = clampedSplitFraction(for: totalWidth, proposed: fraction)
+            let targetLeadingWidth = totalWidth * clampedFraction
+            let currentLeadingWidth = splitView.subviews.first?.frame.width ?? 0
+            hasAppliedInitialSplit = true
+            splitView.desiredFraction = clampedFraction
+
+            guard force || abs(currentLeadingWidth - targetLeadingWidth) > 1 else {
+                return
+            }
+
+            isApplyingProgrammaticUpdate = true
+            splitView.setPosition(targetLeadingWidth, ofDividerAt: 0)
+            isApplyingProgrammaticUpdate = false
+        }
+
+        func resetSplitToCenter(in containerView: SplitContainerView) {
+            splitFraction.wrappedValue = 0.5
+            applySplitFractionIfNeeded(in: containerView, fraction: 0.5, force: true)
+        }
+    }
+}
+
+final class SplitContainerView: NSView {
+    let splitView = ThemedSplitView()
+    let leadingHostingView = NSHostingView(rootView: AnyView(EmptyView()))
+    let trailingHostingView = NSHostingView(rootView: AnyView(EmptyView()))
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+
+        splitView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(splitView)
+
+        NSLayoutConstraint.activate([
+            splitView.leadingAnchor.constraint(equalTo: leadingAnchor),
+            splitView.trailingAnchor.constraint(equalTo: trailingAnchor),
+            splitView.topAnchor.constraint(equalTo: topAnchor),
+            splitView.bottomAnchor.constraint(equalTo: bottomAnchor)
+        ])
+
+        splitView.isVertical = true
+        splitView.dividerStyle = .thin
+        splitView.addSubview(leadingHostingView)
+        splitView.addSubview(trailingHostingView)
+        splitView.adjustSubviews()
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+}
+
+final class ThemedSplitView: NSSplitView {
+    var themeDividerColor: NSColor = .separatorColor {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    var isLightMode = true {
+        didSet {
+            needsDisplay = true
+        }
+    }
+
+    var desiredFraction: CGFloat = 0.5
+    var onResetToCenter: (() -> Void)?
+
+    override var dividerThickness: CGFloat {
+        SplitMetrics.dividerWidth
+    }
+
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        guard subviews.count == 2 else {
+            super.resizeSubviews(withOldSize: oldSize)
+            return
+        }
+
+        let totalWidth = max(bounds.width - dividerThickness, 1)
+        let fraction = clampedSplitFraction(for: totalWidth, proposed: desiredFraction)
+        let leadingWidth = totalWidth * fraction
+        let trailingWidth = max(totalWidth - leadingWidth, 0)
+
+        subviews[0].frame = NSRect(
+            x: 0,
+            y: 0,
+            width: leadingWidth,
+            height: bounds.height
+        )
+        subviews[1].frame = NSRect(
+            x: leadingWidth + dividerThickness,
+            y: 0,
+            width: trailingWidth,
+            height: bounds.height
+        )
+    }
+
+    override func drawDivider(in rect: NSRect) {
+        let backgroundColor = themeDividerColor.withAlphaComponent(isLightMode ? 0.14 : 0.18)
+        backgroundColor.setFill()
+        rect.fill()
+
+        let lineRect = NSRect(
+            x: rect.midX - 0.5,
+            y: rect.minY,
+            width: 1,
+            height: rect.height
+        )
+        themeDividerColor.setFill()
+        lineRect.fill()
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 {
+            let location = convert(event.locationInWindow, from: nil)
+            let dividerRect = activeDividerRect()
+
+            if dividerRect.contains(location) {
+                onResetToCenter?()
+                return
+            }
+        }
+
+        super.mouseDown(with: event)
+    }
+
+    override func resetCursorRects() {
+        super.resetCursorRects()
+
+        let dividerRect = activeDividerRect()
+        guard !dividerRect.isEmpty else {
+            return
+        }
+
+        addCursorRect(dividerRect, cursor: .resizeLeftRight)
+    }
+
+    private func activeDividerRect() -> NSRect {
+        guard subviews.count > 1 else {
+            return .zero
+        }
+
+        return NSRect(
+            x: subviews[0].frame.maxX,
+            y: bounds.minY,
+            width: dividerThickness,
+            height: bounds.height
+        )
+    }
+}
+
 struct WindowConfigurationView: NSViewRepresentable {
     let themeMode: ThemeMode
+    let themePalette: ThemePalette
     let document: DocumentController
 
     func makeCoordinator() -> Coordinator {
@@ -845,7 +1212,7 @@ struct WindowConfigurationView: NSViewRepresentable {
         let view = NSView()
 
         DispatchQueue.main.async {
-            context.coordinator.configureWindow(for: view, themeMode: themeMode)
+            context.coordinator.configureWindow(for: view, themeMode: themeMode, themePalette: themePalette)
         }
 
         return view
@@ -855,7 +1222,7 @@ struct WindowConfigurationView: NSViewRepresentable {
         context.coordinator.document = document
 
         DispatchQueue.main.async {
-            context.coordinator.configureWindow(for: nsView, themeMode: themeMode)
+            context.coordinator.configureWindow(for: nsView, themeMode: themeMode, themePalette: themePalette)
         }
     }
 
@@ -869,7 +1236,7 @@ struct WindowConfigurationView: NSViewRepresentable {
             self.document = document
         }
 
-        func configureWindow(for view: NSView, themeMode: ThemeMode) {
+        func configureWindow(for view: NSView, themeMode: ThemeMode, themePalette: ThemePalette) {
             guard let window = view.window else {
                 return
             }
@@ -880,7 +1247,7 @@ struct WindowConfigurationView: NSViewRepresentable {
             }
 
             window.appearance = NSAppearance(named: themeMode.windowAppearanceName)
-            window.backgroundColor = themeMode.nsBackgroundColor
+            window.backgroundColor = themePalette.nsBackgroundColor
             window.title = document.currentDocumentName
             window.representedURL = document.fileURL
             window.isDocumentEdited = document.isDirty
@@ -1245,6 +1612,70 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
     }
 }
 
+struct ThemeSettingsView: View {
+    @AppStorage(ThemePreferenceKey.lightBackgroundHex) private var lightBackgroundHex = ThemeDefaults.lightBackgroundHex
+    @AppStorage(ThemePreferenceKey.lightToolbarHex) private var lightToolbarHex = ThemeDefaults.lightToolbarHex
+    @AppStorage(ThemePreferenceKey.lightCardHex) private var lightCardHex = ThemeDefaults.lightCardHex
+    @AppStorage(ThemePreferenceKey.lightDividerHex) private var lightDividerHex = ThemeDefaults.lightDividerHex
+    @AppStorage(ThemePreferenceKey.darkBackgroundHex) private var darkBackgroundHex = ThemeDefaults.darkBackgroundHex
+    @AppStorage(ThemePreferenceKey.darkToolbarHex) private var darkToolbarHex = ThemeDefaults.darkToolbarHex
+    @AppStorage(ThemePreferenceKey.darkCardHex) private var darkCardHex = ThemeDefaults.darkCardHex
+    @AppStorage(ThemePreferenceKey.darkDividerHex) private var darkDividerHex = ThemeDefaults.darkDividerHex
+
+    var body: some View {
+        Form {
+            Section {
+                Text("Use the toolbar switch to toggle between Light and Dark. Customize the palette for each mode here.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Section("Light Theme") {
+                ColorPicker("Window Background", selection: colorBinding(for: $lightBackgroundHex, fallback: ThemeDefaults.lightBackgroundHex), supportsOpacity: false)
+                ColorPicker("Toolbar", selection: colorBinding(for: $lightToolbarHex, fallback: ThemeDefaults.lightToolbarHex), supportsOpacity: false)
+                ColorPicker("Cards", selection: colorBinding(for: $lightCardHex, fallback: ThemeDefaults.lightCardHex), supportsOpacity: false)
+                ColorPicker("Divider", selection: colorBinding(for: $lightDividerHex, fallback: ThemeDefaults.lightDividerHex), supportsOpacity: false)
+
+                Button("Reset Light Theme") {
+                    lightBackgroundHex = ThemeDefaults.lightBackgroundHex
+                    lightToolbarHex = ThemeDefaults.lightToolbarHex
+                    lightCardHex = ThemeDefaults.lightCardHex
+                    lightDividerHex = ThemeDefaults.lightDividerHex
+                }
+            }
+
+            Section("Dark Theme") {
+                ColorPicker("Window Background", selection: colorBinding(for: $darkBackgroundHex, fallback: ThemeDefaults.darkBackgroundHex), supportsOpacity: false)
+                ColorPicker("Toolbar", selection: colorBinding(for: $darkToolbarHex, fallback: ThemeDefaults.darkToolbarHex), supportsOpacity: false)
+                ColorPicker("Cards", selection: colorBinding(for: $darkCardHex, fallback: ThemeDefaults.darkCardHex), supportsOpacity: false)
+                ColorPicker("Divider", selection: colorBinding(for: $darkDividerHex, fallback: ThemeDefaults.darkDividerHex), supportsOpacity: false)
+
+                Button("Reset Dark Theme") {
+                    darkBackgroundHex = ThemeDefaults.darkBackgroundHex
+                    darkToolbarHex = ThemeDefaults.darkToolbarHex
+                    darkCardHex = ThemeDefaults.darkCardHex
+                    darkDividerHex = ThemeDefaults.darkDividerHex
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .padding(20)
+        .frame(width: 430)
+    }
+
+    private func colorBinding(for hex: Binding<String>, fallback: String) -> Binding<Color> {
+        Binding(
+            get: {
+                Color(nsColor: NSColor(hexString: hex.wrappedValue) ?? NSColor(hexString: fallback) ?? .white)
+            },
+            set: { newColor in
+                hex.wrappedValue = NSColor(newColor).hexString
+            }
+        )
+    }
+}
+
 struct AppCommands: Commands {
     @ObservedObject var document: DocumentController
 
@@ -1494,6 +1925,10 @@ struct MDViewerApp: App {
         }
         .commands {
             AppCommands(document: document)
+        }
+
+        Settings {
+            ThemeSettingsView()
         }
     }
 }

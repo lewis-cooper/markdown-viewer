@@ -6,12 +6,14 @@ A minimal native macOS markdown viewer and editor built with SwiftUI.
 
 - Split view with a plain text markdown editor and live preview
 - View modes for split, editor-only, and preview-only
-- Theme options for light, dark, and smooth dark
+- Native split divider with drag resize and double-click reset to 50/50
+- Light and dark mode toggle in the toolbar
+- Theme color customization in the standard macOS `Settings...` window
 - Native file open/save, recent files, and drag-and-drop open
 - Unsaved changes protection on open, close, and quit
 - Export to HTML or PDF
 - Clickable links in the preview
-- Remembers the selected theme, view mode, and optionally the last opened file
+- Remembers the selected theme and view mode
 
 ## Project Structure
 
@@ -37,6 +39,8 @@ A minimal native macOS markdown viewer and editor built with SwiftUI.
 swift run
 ```
 
+If `swift run` hits a local module cache permission issue in a restricted environment, use the packaging script below instead.
+
 ## Build A Standalone App
 
 ```bash
@@ -56,4 +60,5 @@ ditto 'dist/Markdown Viewer.app' '/Applications/Markdown Viewer.app'
 ## Notes
 
 - The preview is rendered in `WKWebView` and kept in light mode intentionally.
+- The packaged app bundle is named `Markdown Viewer.app`.
 - Generated build output and packaged app bundles are excluded from git via `.gitignore`.
