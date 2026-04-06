@@ -1,0 +1,9 @@
+.DS_Store
+.build/
+.swiftpm/
+dist/
+
+# Generated icon assets
+icon/AppIcon-1024.png
+icon/AppIcon.icns
+icon/AppIcon.iconset/
