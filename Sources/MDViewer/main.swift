@@ -3,6 +3,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+enum WindowMetrics {
+    static let minimumContentSize = CGSize(width: 680, height: 460)
+    static let compactControlStripMinWidth: CGFloat = 840
+    static let singleRowControlStripMinWidth: CGFloat = 1120
+    static let defaultContentSize = CGSize(width: 1160, height: 700)
+}
+
 enum ViewMode: String, CaseIterable, Identifiable {
     case split
     case editor
@@ -52,6 +59,61 @@ enum ThemeMode: String, CaseIterable, Identifiable {
             return Color(nsColor: NSColor(calibratedWhite: 0.07, alpha: 1))
         case .smooth:
             return Color(nsColor: NSColor(calibratedRed: 0.20, green: 0.23, blue: 0.31, alpha: 1))
+        }
+    }
+
+    var stripTopColor: Color {
+        switch self {
+        case .light:
+            return Color(nsColor: NSColor(calibratedWhite: 0.985, alpha: 1))
+        case .dark:
+            return Color(nsColor: NSColor(calibratedWhite: 0.12, alpha: 1))
+        case .smooth:
+            return Color(nsColor: NSColor(calibratedRed: 0.24, green: 0.27, blue: 0.37, alpha: 1))
+        }
+    }
+
+    var stripBottomColor: Color {
+        switch self {
+        case .light:
+            return secondaryBackgroundColor
+        case .dark:
+            return Color(nsColor: NSColor(calibratedWhite: 0.08, alpha: 1))
+        case .smooth:
+            return Color(nsColor: NSColor(calibratedRed: 0.18, green: 0.20, blue: 0.29, alpha: 1))
+        }
+    }
+
+    var cardBackgroundColor: Color {
+        switch self {
+        case .light:
+            return Color.white.opacity(0.92)
+        case .dark:
+            return Color(nsColor: NSColor(calibratedWhite: 0.16, alpha: 1))
+        case .smooth:
+            return Color(nsColor: NSColor(calibratedRed: 0.29, green: 0.32, blue: 0.44, alpha: 1))
+        }
+    }
+
+    var cardBorderColor: Color {
+        switch self {
+        case .light:
+            return Color.black.opacity(0.08)
+        case .dark:
+            return Color.white.opacity(0.08)
+        case .smooth:
+            return Color.white.opacity(0.10)
+        }
+    }
+
+    var cardShadowColor: Color {
+        switch self {
+        case .light:
+            return Color.black.opacity(0.06)
+        case .dark:
+            return Color.black.opacity(0.24)
+        case .smooth:
+            return Color.black.opacity(0.20)
         }
     }
 
@@ -116,42 +178,20 @@ enum ThemeMode: String, CaseIterable, Identifiable {
 
 @MainActor
 final class DocumentController: ObservableObject {
-    private enum DefaultsKey {
-        static let lastOpenDocumentPath = "lastOpenDocumentPath"
-        static let reopenLastFileOnLaunch = "reopenLastFileOnLaunch"
-    }
-
     @Published var text = "" {
         didSet {
             updateDirtyState()
         }
     }
-    @Published var fileURL: URL? {
-        didSet {
-            persistLastOpenDocumentURLIfNeeded()
-        }
-    }
+    @Published var fileURL: URL?
     @Published private(set) var recentDocumentURLs: [URL] = []
     @Published private(set) var isDirty = false
-    @Published var reopenLastFileOnLaunch: Bool {
-        didSet {
-            persistLaunchPreferences()
-        }
-    }
 
-    private let defaults = UserDefaults.standard
     private var savedText = ""
     private var suppressDirtyStateUpdates = false
 
     init() {
-        if defaults.object(forKey: DefaultsKey.reopenLastFileOnLaunch) == nil {
-            reopenLastFileOnLaunch = true
-        } else {
-            reopenLastFileOnLaunch = defaults.bool(forKey: DefaultsKey.reopenLastFileOnLaunch)
-        }
-
         refreshRecentDocuments()
-        restoreLastSessionIfNeeded()
     }
 
     var currentDocumentName: String {
@@ -344,39 +384,6 @@ final class DocumentController: ObservableObject {
         recentDocumentURLs = NSDocumentController.shared.recentDocumentURLs.filter(\.isFileURL)
     }
 
-    private func restoreLastSessionIfNeeded() {
-        guard reopenLastFileOnLaunch else {
-            return
-        }
-
-        guard let path = defaults.string(forKey: DefaultsKey.lastOpenDocumentPath) else {
-            return
-        }
-
-        let url = URL(fileURLWithPath: path)
-
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            defaults.removeObject(forKey: DefaultsKey.lastOpenDocumentPath)
-            return
-        }
-
-        openDocument(at: url, noteAsRecent: false)
-    }
-
-    private func persistLaunchPreferences() {
-        defaults.set(reopenLastFileOnLaunch, forKey: DefaultsKey.reopenLastFileOnLaunch)
-        persistLastOpenDocumentURLIfNeeded()
-    }
-
-    private func persistLastOpenDocumentURLIfNeeded() {
-        guard reopenLastFileOnLaunch, let url = fileURL else {
-            defaults.removeObject(forKey: DefaultsKey.lastOpenDocumentPath)
-            return
-        }
-
-        defaults.set(url.path, forKey: DefaultsKey.lastOpenDocumentPath)
-    }
-
     private func present(_ error: Error, title: String) {
         let alert = NSAlert(error: error)
         alert.messageText = title
@@ -385,10 +392,17 @@ final class DocumentController: ObservableObject {
 }
 
 struct ContentView: View {
+    private enum ControlStripLayoutMode {
+        case wide
+        case medium
+        case compact
+    }
+
     @EnvironmentObject private var document: DocumentController
     @AppStorage("viewMode") private var viewModeRawValue = ViewMode.split.rawValue
     @AppStorage("themeMode") private var themeModeRawValue = ThemeMode.light.rawValue
     @State private var isDropTargeted = false
+    @State private var controlStripWidth: CGFloat = 0
 
     private var viewMode: ViewMode {
         ViewMode(rawValue: viewModeRawValue) ?? .split
@@ -409,13 +423,6 @@ struct ContentView: View {
         Binding(
             get: { themeMode },
             set: { themeModeRawValue = $0.rawValue }
-        )
-    }
-
-    private var reopenLastFileBinding: Binding<Bool> {
-        Binding(
-            get: { document.reopenLastFileOnLaunch },
-            set: { document.reopenLastFileOnLaunch = $0 }
         )
     }
 
@@ -442,7 +449,10 @@ struct ContentView: View {
         }
         .background(themeMode.backgroundColor)
         .background(WindowConfigurationView(themeMode: themeMode, document: document))
-        .frame(minWidth: 600, minHeight: 400)
+        .frame(
+            minWidth: WindowMetrics.minimumContentSize.width,
+            minHeight: WindowMetrics.minimumContentSize.height
+        )
         .onDrop(of: [UTType.fileURL.identifier], isTargeted: $isDropTargeted, perform: handleFileDrop)
         .overlay {
             if isDropTargeted {
@@ -454,107 +464,332 @@ struct ContentView: View {
         }
     }
 
-    private var controlStrip: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 6) {
-                Button(action: document.openDocument) {
-                    Label("Open", systemImage: "folder")
-                }
-                .lineLimit(1)
-
-                Button(action: { _ = document.saveDocument() }) {
-                    Label("Save", systemImage: "square.and.arrow.down")
-                }
-                .lineLimit(1)
-
-                Menu {
-                    if document.recentDocumentURLs.isEmpty {
-                        Button("No Recent Documents") {}
-                            .disabled(true)
-                    } else {
-                        ForEach(document.recentDocumentURLs, id: \.self) { url in
-                            Button(url.lastPathComponent) {
-                                document.openRecentDocument(url)
-                            }
-                        }
-
-                        Divider()
-
-                        Button("Clear Menu", action: document.clearRecentDocuments)
-                    }
-                } label: {
-                    Label("Recent", systemImage: "clock.arrow.circlepath")
-                }
-                .lineLimit(1)
-
-                Menu {
-                    Button("HTML...", action: document.exportHTML)
-                    Button("PDF...", action: document.exportPDF)
-                } label: {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                }
-            }
-            .buttonStyle(.bordered)
-            .fixedSize(horizontal: true, vertical: false)
-
-            Divider()
-                .frame(height: 18)
-
-            HStack(spacing: 8) {
-                Text("View")
-                    .foregroundStyle(themeMode.secondaryTextColor)
-
-                Picker("View", selection: viewModeBinding) {
-                    ForEach(ViewMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 240)
-            }
-            .fixedSize(horizontal: true, vertical: false)
-
-            HStack(spacing: 8) {
-                Text("Theme")
-                    .foregroundStyle(themeMode.secondaryTextColor)
-
-                Picker("Theme", selection: themeModeBinding) {
-                    ForEach(ThemeMode.allCases) { mode in
-                        Text(mode.title).tag(mode)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-            }
-            .fixedSize(horizontal: true, vertical: false)
-
-            Toggle("Reopen Last File", isOn: reopenLastFileBinding)
-                .toggleStyle(.switch)
-                .fixedSize(horizontal: true, vertical: false)
-
-            Spacer(minLength: 12)
-
-            HStack(spacing: 7) {
-                Circle()
-                    .fill(document.isDirty ? Color.orange : themeMode.secondaryTextColor.opacity(0.45))
-                    .frame(width: 7, height: 7)
-
-                Text(document.currentDocumentStatusText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-            }
-            .foregroundStyle(themeMode.secondaryTextColor)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(themeMode.dividerColor.opacity(themeMode == .light ? 0.65 : 1))
-            .clipShape(Capsule())
+    private var controlStripLayoutMode: ControlStripLayoutMode {
+        if controlStripWidth >= WindowMetrics.singleRowControlStripMinWidth {
+            return .wide
         }
+
+        if controlStripWidth >= WindowMetrics.compactControlStripMinWidth {
+            return .medium
+        }
+
+        return .compact
+    }
+
+    private var controlStrip: some View {
+        Group {
+            switch controlStripLayoutMode {
+            case .wide:
+                singleRowControlStrip
+            case .medium:
+                stackedControlStrip
+            case .compact:
+                compactControlStrip
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .controlSize(.small)
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(themeMode.secondaryBackgroundColor)
+        .background(
+            LinearGradient(
+                colors: [themeMode.stripTopColor, themeMode.stripBottomColor],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .background(controlStripWidthReader)
         .environment(\.colorScheme, themeMode.colorScheme)
+    }
+
+    private var singleRowControlStrip: some View {
+        HStack(spacing: 12) {
+            fileToolbarCard
+            layoutToolbarCard
+            themeToolbarCard
+            Spacer(minLength: 12)
+            documentStatusCard
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var stackedControlStrip: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 12) {
+                fileToolbarCard
+                Spacer(minLength: 12)
+                documentStatusCard
+            }
+
+            HStack(spacing: 12) {
+                layoutToolbarCard
+                Spacer(minLength: 12)
+                themeToolbarCard
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var compactControlStrip: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                compactFileToolbarCard
+                Spacer(minLength: 10)
+                compactDocumentStatusCard
+            }
+
+            HStack(spacing: 10) {
+                compactLayoutToolbarCard
+                Spacer(minLength: 10)
+                compactThemeToolbarCard
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var controlStripWidthReader: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear {
+                    controlStripWidth = proxy.size.width
+                }
+                .onChange(of: proxy.size.width) { newValue in
+                    controlStripWidth = newValue
+                }
+        }
+    }
+
+    private var fileToolbarCard: some View {
+        toolbarCard {
+            HStack(spacing: 10) {
+                toolbarSectionLabel(title: "File", symbol: "folder")
+                stripDivider
+                fileActionStrip
+            }
+        }
+    }
+
+    private var compactFileToolbarCard: some View {
+        toolbarCard(horizontalPadding: 8, verticalPadding: 7, shadowRadius: 5) {
+            fileActionStrip
+        }
+    }
+
+    private var layoutToolbarCard: some View {
+        toolbarCard {
+            HStack(spacing: 10) {
+                toolbarSectionLabel(title: "Layout", symbol: "rectangle.split.2x1")
+                stripDivider
+                viewModeStrip
+            }
+        }
+    }
+
+    private var compactLayoutToolbarCard: some View {
+        toolbarCard(horizontalPadding: 8, verticalPadding: 7, shadowRadius: 5) {
+            viewModeStrip
+        }
+    }
+
+    private var themeToolbarCard: some View {
+        toolbarCard {
+            HStack(spacing: 10) {
+                toolbarSectionLabel(title: "Theme", symbol: "circle.lefthalf.filled")
+                stripDivider
+                themeStrip
+            }
+        }
+    }
+
+    private var compactThemeToolbarCard: some View {
+        toolbarCard(horizontalPadding: 8, verticalPadding: 7, shadowRadius: 5) {
+            HStack(spacing: 7) {
+                Image(systemName: "circle.lefthalf.filled")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(themeMode.secondaryTextColor)
+
+                themeStrip
+            }
+        }
+    }
+
+    private var fileActionStrip: some View {
+        HStack(spacing: 6) {
+            Button(action: document.openDocument) {
+                Label("Open", systemImage: "folder")
+            }
+            .lineLimit(1)
+
+            Button(action: { _ = document.saveDocument() }) {
+                Label("Save", systemImage: "square.and.arrow.down")
+            }
+            .lineLimit(1)
+
+            Menu {
+                if document.recentDocumentURLs.isEmpty {
+                    Button("No Recent Documents") {}
+                        .disabled(true)
+                } else {
+                    ForEach(document.recentDocumentURLs, id: \.self) { url in
+                        Button(url.lastPathComponent) {
+                            document.openRecentDocument(url)
+                        }
+                    }
+
+                    Divider()
+
+                    Button("Clear Menu", action: document.clearRecentDocuments)
+                }
+            } label: {
+                Label("Recent", systemImage: "clock.arrow.circlepath")
+            }
+            .lineLimit(1)
+
+            Menu {
+                Button("HTML...", action: document.exportHTML)
+                Button("PDF...", action: document.exportPDF)
+            } label: {
+                Label("Export", systemImage: "square.and.arrow.up")
+            }
+        }
+        .buttonStyle(.bordered)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var viewModeStrip: some View {
+        Picker("View", selection: viewModeBinding) {
+            ForEach(ViewMode.allCases) { mode in
+                Text(mode.title).tag(mode)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .frame(width: 240)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var themeStrip: some View {
+        Picker("Theme", selection: themeModeBinding) {
+            ForEach(ThemeMode.allCases) { mode in
+                Text(mode.title).tag(mode)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var documentStatusCard: some View {
+        ViewThatFits(in: .horizontal) {
+            toolbarCard {
+                HStack(spacing: 10) {
+                    statusIndicator
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(document.currentDocumentName)
+                            .font(.system(size: 13, weight: .semibold))
+                            .lineLimit(1)
+
+                        Text(document.isDirty ? "Edited locally" : "Saved")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(document.isDirty ? Color.orange : themeMode.secondaryTextColor)
+                    }
+                }
+            }
+
+            toolbarCard {
+                HStack(spacing: 8) {
+                    statusIndicator
+                    Text(document.currentDocumentStatusText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(themeMode.secondaryTextColor)
+                }
+            }
+
+            toolbarCard {
+                HStack(spacing: 8) {
+                    statusIndicator
+                    Text(document.currentDocumentName)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .foregroundStyle(themeMode.secondaryTextColor)
+                }
+            }
+
+            toolbarCard {
+                statusIndicatorOnly
+            }
+        }
+        .frame(maxWidth: 260, alignment: .trailing)
+    }
+
+    private var compactDocumentStatusCard: some View {
+        ViewThatFits(in: .horizontal) {
+            toolbarCard(horizontalPadding: 8, verticalPadding: 7, shadowRadius: 5) {
+                HStack(spacing: 8) {
+                    statusIndicator
+                    Text(document.currentDocumentName)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            toolbarCard(horizontalPadding: 8, verticalPadding: 7, shadowRadius: 5) {
+                statusIndicatorOnly
+            }
+        }
+        .frame(maxWidth: 190, alignment: .trailing)
+    }
+
+    private var stripDivider: some View {
+        Divider()
+            .frame(height: 16)
+    }
+
+    private var statusIndicatorOnly: some View {
+        statusIndicator
+            .padding(.horizontal, 2)
+    }
+
+    private var statusIndicator: some View {
+        Circle()
+            .fill(document.isDirty ? Color.orange : themeMode.secondaryTextColor.opacity(0.45))
+            .frame(width: 7, height: 7)
+    }
+
+    private func toolbarSectionLabel(title: String, symbol: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol)
+                .font(.system(size: 11, weight: .semibold))
+
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.6)
+        }
+        .foregroundStyle(themeMode.secondaryTextColor)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private func toolbarCard<Content: View>(
+        horizontalPadding: CGFloat = 10,
+        verticalPadding: CGFloat = 8,
+        shadowRadius: CGFloat = 8,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        content()
+            .padding(.horizontal, horizontalPadding)
+            .padding(.vertical, verticalPadding)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(themeMode.cardBackgroundColor)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(themeMode.cardBorderColor, lineWidth: 1)
+            }
+            .shadow(color: themeMode.cardShadowColor, radius: shadowRadius, y: 1)
     }
 
     private var editorPane: some View {
@@ -628,6 +863,7 @@ struct WindowConfigurationView: NSViewRepresentable {
     final class Coordinator: NSObject, NSWindowDelegate {
         var document: DocumentController
         weak var window: NSWindow?
+        private var hasAppliedInitialSize = false
 
         init(document: DocumentController) {
             self.document = document
@@ -650,6 +886,19 @@ struct WindowConfigurationView: NSViewRepresentable {
             window.isDocumentEdited = document.isDirty
             window.titleVisibility = .hidden
             window.titlebarAppearsTransparent = false
+            window.contentMinSize = NSSize(
+                width: WindowMetrics.minimumContentSize.width,
+                height: WindowMetrics.minimumContentSize.height
+            )
+
+            if !hasAppliedInitialSize {
+                window.setContentSize(NSSize(
+                    width: WindowMetrics.defaultContentSize.width,
+                    height: WindowMetrics.defaultContentSize.height
+                ))
+                window.center()
+                hasAppliedInitialSize = true
+            }
 
             LayoutVerificationRunner.shared.scheduleIfNeeded(window: window)
         }
@@ -999,13 +1248,6 @@ final class PDFExporter: NSObject, WKNavigationDelegate {
 struct AppCommands: Commands {
     @ObservedObject var document: DocumentController
 
-    private var reopenLastFileBinding: Binding<Bool> {
-        Binding(
-            get: { document.reopenLastFileOnLaunch },
-            set: { document.reopenLastFileOnLaunch = $0 }
-        )
-    }
-
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
             Button("Open...", action: document.openDocument)
@@ -1040,16 +1282,17 @@ struct AppCommands: Commands {
             Button("Export HTML...", action: document.exportHTML)
             Button("Export PDF...", action: document.exportPDF)
         }
-
-        CommandMenu("Options") {
-            Toggle("Reopen Last File on Launch", isOn: reopenLastFileBinding)
-        }
     }
 }
 
 @MainActor
 final class LayoutVerificationRunner {
     static let shared = LayoutVerificationRunner()
+
+    private struct LayoutSnapshot {
+        let widths: [String: CGFloat]
+        let overflow: [String: CGFloat]
+    }
 
     private let isEnabled = ProcessInfo.processInfo.environment["MDVIEWER_VERIFY_TOPBAR_RESIZE"] == "1"
     private var hasStarted = false
@@ -1060,11 +1303,15 @@ final class LayoutVerificationRunner {
         }
 
         hasStarted = true
+        let minimumWidth = max(window.contentMinSize.width, WindowMetrics.minimumContentSize.width)
+        let mediumWidth = (WindowMetrics.compactControlStripMinWidth + WindowMetrics.singleRowControlStripMinWidth) / 2
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            self.measure(window: window, width: 900, label: "narrow") { narrowWidths in
-                self.measure(window: window, width: 1500, label: "wide") { wideWidths in
-                    self.finish(narrow: narrowWidths, wide: wideWidths)
+            self.measure(window: window, width: minimumWidth, label: "minimum") { minimumSnapshot in
+                self.measure(window: window, width: mediumWidth, label: "medium") { mediumSnapshot in
+                    self.measure(window: window, width: 1500, label: "wide") { wideSnapshot in
+                        self.finish(window: window, minimum: minimumSnapshot, medium: mediumSnapshot, wide: wideSnapshot)
+                    }
                 }
             }
         }
@@ -1074,54 +1321,57 @@ final class LayoutVerificationRunner {
         window: NSWindow,
         width: CGFloat,
         label: String,
-        completion: @escaping ([String: CGFloat]) -> Void
+        completion: @escaping (LayoutSnapshot) -> Void
     ) {
-        var frame = window.frame
-        frame.size.width = width
-        frame.size.height = max(frame.size.height, 720)
-        window.setFrame(frame, display: true, animate: false)
+        window.setContentSize(NSSize(width: width, height: max(window.contentLayoutRect.height, 720)))
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             window.layoutIfNeeded()
             window.contentView?.layoutSubtreeIfNeeded()
             let widths = self.captureControlWidths(in: window)
+            let overflow = self.captureControlOverflow(in: window)
+            let screenshotURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent(".build/layout-verify-\(label).png")
+            self.saveSnapshot(of: window, to: screenshotURL)
             print("LAYOUT-\(label.uppercased()): \(self.serialized(widths))")
-            completion(widths)
+            print("LAYOUT-\(label.uppercased())-OVERFLOW: \(self.serialized(overflow))")
+            print("LAYOUT-\(label.uppercased())-SNAPSHOT: \(screenshotURL.path)")
+            completion(LayoutSnapshot(widths: widths, overflow: overflow))
         }
     }
 
-    private func finish(narrow: [String: CGFloat], wide: [String: CGFloat]) {
+    private func finish(window: NSWindow, minimum: LayoutSnapshot, medium: LayoutSnapshot, wide: LayoutSnapshot) {
         let screenshotURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
             .appendingPathComponent(".build/layout-verify.png")
 
-        if let window = NSApp.windows.first {
-            saveSnapshot(of: window, to: screenshotURL)
-            print("LAYOUT-SNAPSHOT: \(screenshotURL.path)")
-        }
+        saveSnapshot(of: window, to: screenshotURL)
+        print("LAYOUT-SNAPSHOT: \(screenshotURL.path)")
 
         let trackedKeys = [
             "button:Open",
             "button:Save",
             "button:Recent",
             "button:Export",
-            "button:Reopen Last File",
             "segmented:Split|Markdown|Preview"
         ]
 
         let maxDelta = trackedKeys.compactMap { key -> CGFloat? in
-            guard let first = narrow[key], let second = wide[key] else {
+            guard let first = minimum.widths[key], let second = wide.widths[key] else {
                 return nil
             }
 
             return abs(first - second)
         }.max() ?? .greatestFiniteMagnitude
 
-        if maxDelta <= 1.0 {
-            print("LAYOUT-VERIFY: PASS max_delta=\(String(format: "%.1f", maxDelta))")
+        let maxOverflow = trackedKeys.compactMap { minimum.overflow[$0] }.max() ?? .greatestFiniteMagnitude
+        let mediumMaxOverflow = trackedKeys.compactMap { medium.overflow[$0] }.max() ?? .greatestFiniteMagnitude
+
+        if maxDelta <= 1.0, maxOverflow <= 1.0, mediumMaxOverflow <= 1.0 {
+            print("LAYOUT-VERIFY: PASS max_delta=\(String(format: "%.1f", maxDelta)) max_overflow=\(String(format: "%.1f", maxOverflow)) medium_overflow=\(String(format: "%.1f", mediumMaxOverflow))")
             fflush(stdout)
             NSApp.terminate(nil)
         } else {
-            print("LAYOUT-VERIFY: FAIL max_delta=\(String(format: "%.1f", maxDelta))")
+            print("LAYOUT-VERIFY: FAIL max_delta=\(String(format: "%.1f", maxDelta)) max_overflow=\(String(format: "%.1f", maxOverflow)) medium_overflow=\(String(format: "%.1f", mediumMaxOverflow))")
             fflush(stdout)
             exit(1)
         }
@@ -1155,19 +1405,50 @@ final class LayoutVerificationRunner {
         var widths: [String: CGFloat] = [:]
 
         for view in allSubviews(of: contentView) {
-            if let segmented = view as? NSSegmentedControl {
-                let labels = (0..<segmented.segmentCount).map { segmented.label(forSegment: $0) ?? "" }
-                let key = "segmented:\(labels.joined(separator: "|"))"
-                widths[key] = round(segmented.frame.width * 10) / 10
-            } else if let popup = view as? NSPopUpButton {
-                let title = popup.selectedItem?.title ?? popup.titleOfSelectedItem ?? "popup"
-                widths["popup:\(title)"] = round(popup.frame.width * 10) / 10
-            } else if let button = view as? NSButton, !button.title.isEmpty {
-                widths["button:\(button.title)"] = round(button.frame.width * 10) / 10
+            if let key = controlKey(for: view) {
+                widths[key] = round(view.frame.width * 10) / 10
             }
         }
 
         return widths
+    }
+
+    private func captureControlOverflow(in window: NSWindow) -> [String: CGFloat] {
+        guard let contentView = window.contentView else {
+            return [:]
+        }
+
+        var overflow: [String: CGFloat] = [:]
+
+        for view in allSubviews(of: contentView) {
+            guard let key = controlKey(for: view) else {
+                continue
+            }
+
+            let frame = view.convert(view.bounds, to: contentView)
+            let clippedWidth = max(0, frame.maxX - contentView.bounds.maxX)
+            overflow[key] = round(clippedWidth * 10) / 10
+        }
+
+        return overflow
+    }
+
+    private func controlKey(for view: NSView) -> String? {
+        if let segmented = view as? NSSegmentedControl {
+            let labels = (0..<segmented.segmentCount).map { segmented.label(forSegment: $0) ?? "" }
+            return "segmented:\(labels.joined(separator: "|"))"
+        }
+
+        if let popup = view as? NSPopUpButton {
+            let title = popup.selectedItem?.title ?? popup.titleOfSelectedItem ?? "popup"
+            return "popup:\(title)"
+        }
+
+        if let button = view as? NSButton, !button.title.isEmpty {
+            return "button:\(button.title)"
+        }
+
+        return nil
     }
 
     private func allSubviews(of view: NSView) -> [NSView] {
