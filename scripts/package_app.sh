@@ -46,6 +46,21 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 <dict>
   <key>CFBundleDevelopmentRegion</key>
   <string>en</string>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key>
+      <string>Markdown Document</string>
+      <key>CFBundleTypeRole</key>
+      <string>Editor</string>
+      <key>LSHandlerRank</key>
+      <string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>net.daringfireball.markdown</string>
+      </array>
+    </dict>
+  </array>
   <key>CFBundleExecutable</key>
   <string>MDViewer</string>
   <key>CFBundleIconFile</key>
@@ -66,6 +81,32 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
   <string>13.0</string>
   <key>NSHighResolutionCapable</key>
   <true/>
+  <key>UTImportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeConformsTo</key>
+      <array>
+        <string>public.plain-text</string>
+      </array>
+      <key>UTTypeDescription</key>
+      <string>Markdown document</string>
+      <key>UTTypeIdentifier</key>
+      <string>net.daringfireball.markdown</string>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array>
+          <string>md</string>
+          <string>markdown</string>
+        </array>
+        <key>public.mime-type</key>
+        <array>
+          <string>text/markdown</string>
+          <string>text/x-markdown</string>
+        </array>
+      </dict>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST

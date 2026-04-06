@@ -277,7 +277,7 @@ final class DocumentController: ObservableObject {
             return
         }
 
-        openDocument(at: url)
+        _ = openDocument(at: url)
     }
 
     func openRecentDocument(_ url: URL) {
@@ -285,7 +285,7 @@ final class DocumentController: ObservableObject {
             return
         }
 
-        openDocument(at: url)
+        _ = openDocument(at: url)
     }
 
     func openDroppedDocument(_ url: URL) {
@@ -293,7 +293,16 @@ final class DocumentController: ObservableObject {
             return
         }
 
-        openDocument(at: url)
+        _ = openDocument(at: url)
+    }
+
+    @discardableResult
+    func openExternalDocument(_ url: URL) -> Bool {
+        guard confirmLossIfNeeded(for: "opening another file") else {
+            return false
+        }
+
+        return openDocument(at: url)
     }
 
     func clearRecentDocuments() {
@@ -363,7 +372,8 @@ final class DocumentController: ObservableObject {
         confirmLossIfNeeded(for: "quitting")
     }
 
-    private func openDocument(at url: URL, noteAsRecent: Bool = true) {
+    @discardableResult
+    private func openDocument(at url: URL, noteAsRecent: Bool = true) -> Bool {
         do {
             let contents = try String(contentsOf: url, encoding: .utf8)
             applyDocumentState(text: contents, fileURL: url)
@@ -371,9 +381,12 @@ final class DocumentController: ObservableObject {
             if noteAsRecent {
                 noteRecentDocument(url)
             }
+
+            return true
         } catch {
             refreshRecentDocuments()
             present(error, title: "Unable to Open File")
+            return false
         }
     }
 
@@ -473,6 +486,7 @@ struct ContentView: View {
     @State private var isDropTargeted = false
     @State private var controlStripWidth: CGFloat = 0
     @State private var splitFraction: CGFloat = 0.5
+    @State private var splitResetToken = 0
 
     private var viewMode: ViewMode {
         ViewMode(rawValue: viewModeRawValue) ?? .split
@@ -516,7 +530,14 @@ struct ContentView: View {
     private var viewModeBinding: Binding<ViewMode> {
         Binding(
             get: { viewMode },
-            set: { viewModeRawValue = $0.rawValue }
+            set: { newValue in
+                if newValue == .split && viewMode != .split {
+                    splitFraction = 0.5
+                    splitResetToken += 1
+                }
+
+                viewModeRawValue = newValue.rawValue
+            }
         )
     }
 
@@ -570,6 +591,7 @@ struct ContentView: View {
             leading: editorPane,
             trailing: previewPane
         )
+        .id(splitResetToken)
     }
 
     private var controlStripLayoutMode: ControlStripLayoutMode {
@@ -961,6 +983,13 @@ struct NativeSplitPane<Leading: View, Trailing: View>: NSViewRepresentable {
         containerView.splitView.delegate = context.coordinator
         containerView.splitView.themeDividerColor = dividerNSColor
         containerView.splitView.isLightMode = isLightMode
+        containerView.onDidLayout = { [weak containerView, weak coordinator = context.coordinator] in
+            guard let containerView, let coordinator else {
+                return
+            }
+
+            coordinator.handleContainerLayout(in: containerView)
+        }
         containerView.splitView.onResetToCenter = { [weak containerView, weak coordinator = context.coordinator] in
             guard let containerView, let coordinator else {
                 return
@@ -1062,6 +1091,14 @@ struct NativeSplitPane<Leading: View, Trailing: View>: NSViewRepresentable {
             isApplyingProgrammaticUpdate = false
         }
 
+        func handleContainerLayout(in containerView: SplitContainerView) {
+            applySplitFractionIfNeeded(
+                in: containerView,
+                fraction: splitFraction.wrappedValue,
+                force: !hasAppliedInitialSplit
+            )
+        }
+
         func resetSplitToCenter(in containerView: SplitContainerView) {
             splitFraction.wrappedValue = 0.5
             applySplitFractionIfNeeded(in: containerView, fraction: 0.5, force: true)
@@ -1073,6 +1110,7 @@ final class SplitContainerView: NSView {
     let splitView = ThemedSplitView()
     let leadingHostingView = NSHostingView(rootView: AnyView(EmptyView()))
     let trailingHostingView = NSHostingView(rootView: AnyView(EmptyView()))
+    var onDidLayout: (() -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -1097,6 +1135,14 @@ final class SplitContainerView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+
+        if bounds.width > 1, bounds.height > 1 {
+            onDidLayout?()
+        }
     }
 }
 
@@ -1903,6 +1949,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         return documentController.canTerminateApplication() ? .terminateNow : .terminateCancel
+    }
+
+    func application(_ sender: NSApplication, openFile filename: String) -> Bool {
+        guard let documentController else {
+            return false
+        }
+
+        return documentController.openExternalDocument(URL(fileURLWithPath: filename))
+    }
+
+    func application(_ sender: NSApplication, openFiles filenames: [String]) {
+        guard let documentController, let firstFilename = filenames.first else {
+            sender.reply(toOpenOrPrint: .failure)
+            return
+        }
+
+        let didOpen = documentController.openExternalDocument(URL(fileURLWithPath: firstFilename))
+        sender.reply(toOpenOrPrint: didOpen ? .success : .failure)
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let documentController, let firstURL = urls.first else {
+            return
+        }
+
+        _ = documentController.openExternalDocument(firstURL)
     }
 }
 

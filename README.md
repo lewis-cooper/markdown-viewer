@@ -10,6 +10,7 @@ A minimal native macOS markdown viewer and editor built with SwiftUI.
 - Light and dark mode toggle in the toolbar
 - Theme color customization in the standard macOS `Settings...` window
 - Native file open/save, recent files, and drag-and-drop open
+- Supports opening `.md` files from Finder and being set as the default Markdown app
 - Unsaved changes protection on open, close, and quit
 - Export to HTML or PDF
 - Clickable links in the preview
